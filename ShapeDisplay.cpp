@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "ShapeDisplay.h"
 #include <commdlg.h>
 #include <vector>
@@ -17,7 +17,7 @@ POINT g_imagePosition = { 20, 0 };
 bool g_isDragging = false;
 POINT g_dragOffset = { 0, 0 };
 std::vector<POINT> g_shapePixels;
-COLORREF g_currentShapeColor = RGB(64, 224, 208);
+COLORREF g_currentShapeColor = 0;
 
 ATOM MyRegisterClass(HINSTANCE hInstance);
 BOOL InitInstance(HINSTANCE, int);
@@ -26,6 +26,7 @@ INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
 HBITMAP LoadBMPFile(HWND hwnd);
 void AnalyzeImage(HBITMAP hBitmap);
+COLORREF DetermineShapeColor(HBITMAP hBitmap);
 void PrepareBuffer(HWND hWnd);
 void DrawImage(HDC hdc);
 void ChangeShapeColor(COLORREF newColor);
@@ -114,10 +115,30 @@ HBITMAP LoadBMPFile(HWND hwnd) {
         if (hBitmap) {
             GetObject(hBitmap, sizeof(BITMAP), &g_bitmapInfo);
             AnalyzeImage(hBitmap);
+            g_currentShapeColor = DetermineShapeColor(hBitmap);
             return hBitmap;
         }
     }
     return NULL;
+}
+
+COLORREF DetermineShapeColor(HBITMAP hBitmap) {
+    if (g_shapePixels.empty()) return RGB(255, 255, 255);
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    SelectObject(hdcMem, hBitmap);
+
+    COLORREF shapeColor = RGB(255, 255, 255);
+
+    int centerIndex = g_shapePixels.size() / 2;
+    POINT centerPt = g_shapePixels[centerIndex];
+    shapeColor = GetPixel(hdcMem, centerPt.x, centerPt.y);
+
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+
+    return shapeColor;
 }
 
 void AnalyzeImage(HBITMAP hBitmap) {
@@ -191,7 +212,10 @@ void DrawTextOnImage(HDC hdcMem) {
         DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, TEXT("Arial"));
     HFONT hOldFont = (HFONT)SelectObject(hdcMem, hFont);
 
-    SetTextColor(hdcMem, RGB(0, 0, 0));
+    int brightness = (GetRValue(g_currentShapeColor) + GetGValue(g_currentShapeColor) + GetBValue(g_currentShapeColor)) / 3;
+    COLORREF textColor = (brightness > 128) ? RGB(0, 0, 0) : RGB(255, 255, 255);
+
+    SetTextColor(hdcMem, textColor);
     SetBkMode(hdcMem, TRANSPARENT);
 
     std::string text = "Малышева Олеся";
@@ -242,6 +266,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             RECT rect;
             GetClientRect(hWnd, &rect);
+            g_imagePosition.x = 20;
             g_imagePosition.y = (rect.bottom - g_bitmapInfo.bmHeight) / 2;
             PrepareBuffer(hWnd);
         }
@@ -275,6 +300,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         RECT rect;
         GetClientRect(hWnd, &rect);
+        g_imagePosition.x = 20;
         g_imagePosition.y = (rect.bottom - g_bitmapInfo.bmHeight) / 2;
         PrepareBuffer(hWnd);
         InvalidateRect(hWnd, NULL, TRUE);
@@ -298,11 +324,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         int x = LOWORD(lParam), y = HIWORD(lParam);
         if (IsPointInShape(x, y)) {
             static COLORREF colors[] = {
-                RGB(64, 224, 208),
                 RGB(255, 0, 0),
                 RGB(0, 255, 0),
                 RGB(0, 0, 255),
                 RGB(255, 255, 0),
+                RGB(255, 165, 0),
                 RGB(255, 0, 255),
                 RGB(0, 255, 255),
                 RGB(128, 0, 128)
